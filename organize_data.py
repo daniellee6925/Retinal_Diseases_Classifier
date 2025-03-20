@@ -4,8 +4,8 @@ import shutil
 
 # Define paths
 data_dir = "data/images"  # Folder containing images
-train_csv = "data/train_data.csv"  # CSV file containing labels
-output_dir = "data/train"  # Destination folder
+train_csv = "data/val_data.csv"  # CSV file containing labels
+output_dir = "data/Val"  # Destination folder
 
 # Create output directory if it doesn't exist
 os.makedirs(output_dir, exist_ok=True)
