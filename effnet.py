@@ -28,6 +28,19 @@ phi_values = {
 
 
 class CNNBlock(nn.Module):
+    """
+    A convolutional block consisting of a convolutional layer, batch normalization,
+    and a SiLU activation function. Used for feature extraction in CNN-based architectures.
+
+    Args:
+        in_channels (int): Number of input channels in the image or feature map.
+        out_channels (int): Number of output channels after applying the convolution.
+        kernel_size (int): Size of the convolutional filter.
+        stride (int): Step size for moving the filter across the input.
+        padding (int): Amount of padding added to the input to maintain spatial dimensions.
+        groups (int, optional): Number of groups for grouped convolution. Defaults to 1 (standard convolution).
+    """
+
     def __init__(
         self, in_channels, out_channels, kernel_size, stride, padding, groups=1
     ):
@@ -49,6 +62,15 @@ class CNNBlock(nn.Module):
 
 
 class SqueezeExcitation(nn.Module):
+    """
+    Implements a Squeeze-and-Excitation (SE) block that adaptively recalibrates channel-wise feature responses.
+    It enhances important features while suppressing less useful ones.
+
+    Args:
+        in_channels (int): Number of input channels in the feature map.
+        reduced_dim (int): Reduced dimension for the squeeze operation, controlling the compression ratio.
+    """
+
     def __init__(self, in_channels, reduced_dim):
         super(SqueezeExcitation, self).__init__()
         self.se = nn.Sequential(
@@ -64,6 +86,21 @@ class SqueezeExcitation(nn.Module):
 
 
 class InvertedResidualBlock(nn.Module):
+    """
+    Implements an Inverted Residual Block with optional Squeeze-and-Excitation (SE)
+    and Stochastic Depth for efficient deep learning.
+
+    Args:
+        in_channels (int): Number of input channels in the feature map.
+        out_channels (int): Number of output channels after processing.
+        kernel_size (int): Size of the depthwise convolution filter.
+        stride (int): Step size for the convolution.
+        padding (int): Amount of padding added to maintain spatial dimensions.
+        expand_ratio (int): Factor by which the input channels are expanded in the first step.
+        reduction (int, optional): Reduction ratio for the Squeeze-and-Excitation block. Defaults to 4.
+        survival_prob (float, optional): Probability of keeping the layer active in Stochastic Depth. Defaults to 0.8.
+    """
+
     def __init__(
         self,
         in_channels,
@@ -120,4 +157,76 @@ class InvertedResidualBlock(nn.Module):
 
 
 class EfficientNet(nn.Module):
-    pass
+    """
+    Implements the EfficientNet architecture, a family of scalable convolutional neural networks
+    that balance accuracy and efficiency by scaling depth, width, and resolution.
+
+    Args:
+        version (str): Specifies the EfficientNet variant (e.g., "b0", "b1", "b2", etc.),
+                       which determines scaling factors for width, depth, and dropout.
+        num_classes (int): Number of output classes for classification.
+    """
+
+    def __init__(self, version, num_classes):
+        super(EfficientNet, self).__init__()
+        width_factor, depth_factor, dropout_rate = self.calculate_factors(version)
+        last_channels = ceil(1280 * width_factor)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.features = self.create_features(width_factor, depth_factor, last_channels)
+        self.classifier = nn.Sequential(
+            nn.Dropout(dropout_rate), nn.Linear(last_channels, num_classes)
+        )
+
+    def calculate_factors(self, version, alpha=1.2, beta=1.1):
+        phi, res, drop_rate = phi_values[version]
+        depth_factor = alpha**phi
+        width_factor = beta**phi
+        return width_factor, depth_factor, drop_rate
+
+    def create_features(self, width_factor, depth_factor, last_channels):
+        channels = int(32 * width_factor)
+        features = [CNNBlock(3, channels, 3, stride=2, padding=1)]
+        in_channels = channels
+
+        for expand_ratio, channels, repeats, stride, kernel_size in base_model:
+            # always divisble by 4
+            out_channels = 4 * ceil(int(channels * width_factor) / 4)
+            layer_repeats = ceil(repeats * depth_factor)
+            for layer in range(layer_repeats):
+                features.append(
+                    InvertedResidualBlock(
+                        in_channels,
+                        out_channels,
+                        expand_ratio=expand_ratio,
+                        stride=stride if layer == 0 else 1,
+                        kernel_size=kernel_size,
+                        padding=kernel_size // 2,
+                    )
+                )
+                in_channels = out_channels
+        features.append(
+            CNNBlock(in_channels, last_channels, kernel_size=1, stride=1, padding=0)
+        )
+
+        return nn.Sequential(*features)
+
+    def forward(self, x):
+        x = self.pool(self.features(x))
+        return self.classifier(x.view(x.shape[0], -1))
+
+
+"""Test for checking correct model implementation """
+
+
+def test():
+    device = "cuda"
+    version = "b2"
+    phi, res, drop_rate = phi_values[version]
+    num_examples, num_classes = 4, 10
+    x = torch.randn((num_examples, 3, res, res)).to(device)
+    model = EfficientNet(version=version, num_classes=num_classes).to(device)
+
+    print(model(x).shape)  # (num_examples, num_classes)
+
+
+test()
