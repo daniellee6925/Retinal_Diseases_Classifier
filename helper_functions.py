@@ -120,6 +120,66 @@ def accuracy_fn(y_true, y_pred):
     return acc
 
 
+# Calculate precision (a classification metric)
+def precision_fn(y_true, y_pred):
+    """Calculates precision between truth labels and predictions.
+
+    Args:
+        y_true (torch.Tensor): Ground truth labels.
+        y_pred (torch.Tensor): Predicted labels.
+
+    Returns:
+        [torch.float]: Precision value, e.g., 85.23
+    """
+    true_positives = torch.sum((y_pred == 1) & (y_true == 1)).item()
+    predicted_positives = torch.sum(y_pred == 1).item()
+
+    precision = (
+        (true_positives / predicted_positives) * 100 if predicted_positives > 0 else 0.0
+    )
+    return precision
+
+
+# Calculate recall (a classification metric)
+def recall_fn(y_true, y_pred):
+    """Calculates recall between truth labels and predictions.
+
+    Args:
+        y_true (torch.Tensor): Ground truth labels.
+        y_pred (torch.Tensor): Predicted labels.
+
+    Returns:
+        [torch.float]: Recall value, e.g., 92.31
+    """
+    true_positives = torch.sum((y_pred == 1) & (y_true == 1)).item()
+    actual_positives = torch.sum(y_true == 1).item()
+
+    recall = (true_positives / actual_positives) * 100 if actual_positives > 0 else 0.0
+    return recall
+
+
+# Calculate F1-score (a classification metric)
+def f1_score_fn(y_true, y_pred):
+    """Calculates the F1-score between truth labels and predictions.
+
+    Args:
+        y_true (torch.Tensor): Ground truth labels.
+        y_pred (torch.Tensor): Predicted labels.
+
+    Returns:
+        [torch.float]: F1-score value, e.g., 88.57
+    """
+    precision = precision_fn(y_true, y_pred)
+    recall = recall_fn(y_true, y_pred)
+
+    f1 = (
+        (2 * precision * recall) / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
+    return f1
+
+
 def print_train_time(start, end, device=None):
     """Prints difference between start and end time.
 
@@ -252,48 +312,3 @@ def set_seeds(seed: int = 42):
     torch.manual_seed(seed)
     # Set the seed for CUDA torch operations (ones that happen on the GPU)
     torch.cuda.manual_seed(seed)
-
-
-def download_data(source: str, destination: str, remove_source: bool = True) -> Path:
-    """Downloads a zipped dataset from source and unzips to destination.
-
-    Args:
-        source (str): A link to a zipped file containing data.
-        destination (str): A target directory to unzip data to.
-        remove_source (bool): Whether to remove the source after downloading and extracting.
-
-    Returns:
-        pathlib.Path to downloaded data.
-
-    Example usage:
-        download_data(source="https://github.com/mrdbourke/pytorch-deep-learning/raw/main/data/pizza_steak_sushi.zip",
-                      destination="pizza_steak_sushi")
-    """
-    # Setup path to data folder
-    data_path = Path("data/")
-    image_path = data_path / destination
-
-    # If the image folder doesn't exist, download it and prepare it...
-    if image_path.is_dir():
-        print(f"[INFO] {image_path} directory exists, skipping download.")
-    else:
-        print(f"[INFO] Did not find {image_path} directory, creating one...")
-        image_path.mkdir(parents=True, exist_ok=True)
-
-        # Download pizza, steak, sushi data
-        target_file = Path(source).name
-        with open(data_path / target_file, "wb") as f:
-            request = requests.get(source)
-            print(f"[INFO] Downloading {target_file} from {source}...")
-            f.write(request.content)
-
-        # Unzip pizza, steak, sushi data
-        with zipfile.ZipFile(data_path / target_file, "r") as zip_ref:
-            print(f"[INFO] Unzipping {target_file} data...")
-            zip_ref.extractall(image_path)
-
-        # Remove .zip file
-        if remove_source:
-            os.remove(data_path / target_file)
-
-    return image_path
