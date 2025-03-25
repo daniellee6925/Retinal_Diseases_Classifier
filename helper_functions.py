@@ -10,6 +10,9 @@ import numpy as np
 
 from torch import nn
 
+from sklearn.metrics import roc_auc_score
+import torch.nn.functional as F
+
 
 from typing import List
 import torchvision
@@ -178,6 +181,23 @@ def f1_score_fn(y_true, y_pred):
         else 0.0
     )
     return f1
+
+
+def roc_auc_fn(y_true, y_pred_probs):
+    """Calculates the ROC-AUC score for classification.
+
+    Args:
+        y_true (torch.Tensor): Ground truth labels (binary: 0 or 1).
+        y_pred_probs (torch.Tensor): Model-predicted probabilities for the positive class.
+
+    Returns:
+        [float]: ROC-AUC score, ranging from 0 to 1.
+    """
+    # Convert tensors to NumPy for sklearn
+    y_true_np = y_true.cpu().numpy()
+    y_pred_probs_np = y_pred_probs.cpu().numpy()
+
+    return roc_auc_score(y_true_np, y_pred_probs_np)
 
 
 def print_train_time(start, end, device=None):
