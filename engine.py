@@ -6,8 +6,10 @@ import torch
 import torch.nn as nn
 import torchvision
 import effnet
+import ViT
 from tqdm.auto import tqdm  # proccess bar
 from torch.utils.tensorboard import SummaryWriter
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 
 def train_step(
@@ -34,8 +36,8 @@ def train_step(
     device: target device to compute ("cpu", "cuda")
 
     Returns:
-    A tuple of training loss, training accuracy
-    (train_loss, train_accuracy)
+    A tuple of training loss, training accuracy, training precision, training recall, training f1-score
+    (train_loss, train_accuracy, train_precision, train_recall, train_f1)
     """
 
     # put model on train mode
@@ -43,6 +45,7 @@ def train_step(
 
     # set train loss and acc
     train_loss, train_acc = 0, 0
+    train_precision, train_recall, train_f1 = 0, 0, 0
 
     # Loop through batches in DataLoader
     for batch, (X, y) in enumerate(dataloader):
@@ -69,12 +72,28 @@ def train_step(
         y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
         train_acc += (y_pred_class == y).sum().item() / len(y_pred)
 
+        # Convert tensors to NumPy for sklearn metrics
+        y_true_np = y.cpu().numpy()
+        y_pred_np = y_pred_class.cpu().numpy()
+
+        # Calculate and accumulate precision, recall, and F1-score (macro-averaged for multi-class classification)
+        train_precision += precision_score(
+            y_true_np, y_pred_np, average="macro", zero_division=0
+        )
+        train_recall += recall_score(
+            y_true_np, y_pred_np, average="macro", zero_division=0
+        )
+        train_f1 += f1_score(y_true_np, y_pred_np, average="macro")
+
     # Adjust metrics to get average over per batch
     train_loss /= len(dataloader)
     train_acc /= len(dataloader)
+    train_precision /= len(dataloader)
+    train_recall /= len(dataloader)
+    train_f1 /= len(dataloader)
 
     # return output
-    return train_loss, train_acc
+    return train_loss, train_acc, train_precision, train_recall, train_f1
 
 
 def test_step(
@@ -97,14 +116,15 @@ def test_step(
     device: target device to compute ("cpu", "cuda")
 
     Returns:
-    A tuple of training loss, training accuracy
-    (train_loss, train_accuracy)
+    A tuple of test loss, test accuracy, test precision, traintesting recall, test f1-score
+    (test_loss, test_accuracy, test_precision, test_recall, test_f1)
     """
     # put model on evaluation mode
     model.eval()
 
     # setup test loss and test acc
     test_loss, test_acc = 0, 0
+    test_precision, test_recall, test_f1 = 0, 0, 0
 
     # turn on inference mode on torch
     with torch.inference_mode():
@@ -125,12 +145,28 @@ def test_step(
             )
             test_acc += (test_pred_labels == y).sum().item() / len(test_pred_labels)
 
+            # Convert tensors to NumPy for sklearn metrics
+            y_true_np = y.cpu().numpy()
+            y_pred_np = test_pred_labels.cpu().numpy()
+
+            # Calculate and accumulate precision, recall, and F1-score (macro-averaged for multi-class classification)
+            test_precision += precision_score(
+                y_true_np, y_pred_np, average="macro", zero_division=0
+            )
+            test_recall += recall_score(
+                y_true_np, y_pred_np, average="macro", zero_division=0
+            )
+            test_f1 += f1_score(y_true_np, y_pred_np, average="macro")
+
     # adjust metrics to get average per batch
     test_loss /= len(dataloader)
     test_acc /= len(dataloader)
+    test_precision /= len(dataloader)
+    test_recall /= len(dataloader)
+    test_f1 /= len(dataloader)
 
     # return outputs
-    return test_loss, test_acc
+    return test_loss, test_acc, test_precision, test_recall, test_f1
 
 
 def train(
@@ -159,23 +195,34 @@ def train(
     writer: A SummaryWriter() instance to log model results to
 
     Returns:
-    Dictionary of training and testing loss and accuracy
-    {train_loss: [...], train_acc:[...], test_loss[...], test_acc[...]}
+    Dictionary of training and testing loss, accuracy, precision, recall, f1-score
+    {train_loss: [...], train_acc:[...], test_loss[...], test_acc[...], train_pre[...]..., test_f1[...]}
     """
 
     # create results dictionary
-    results = {"train_loss": [], "train_acc": [], "test_loss": [], "test_acc": []}
+    results = {
+        "train_loss": [],
+        "train_acc": [],
+        "test_loss": [],
+        "test_acc": [],
+        "train_prec": [],
+        "test_prec": [],
+        "train_rec": [],
+        "test_rec": [],
+        "train_f1": [],
+        "test_f1": [],
+    }
 
     # loop through training and test loos for a number of epochs
     for epoch in tqdm(range(epochs)):
-        train_loss, train_acc = train_step(
+        train_loss, train_acc, train_prec, train_rec, train_f1 = train_step(
             model=model,
             dataloader=train_dataloader,
             loss_fn=loss_fn,
             optimizer=optimizer,
             device=device,
         )
-        test_loss, test_acc = test_step(
+        test_loss, test_acc, test_prec, test_rec, test_f1 = test_step(
             model=model,
             dataloader=test_dataloader,
             loss_fn=loss_fn,
@@ -186,14 +233,27 @@ def train(
             f"Epoch: {epoch + 1} | "
             f"train_loss : {train_loss:.4f} | "
             f"train_acc : {train_acc:.4f} | "
+            f"train_prec : {train_prec:.4f} | "
+            f"train_rec : {train_rec:.4f} | "
+            f"train_f1 : {train_f1:.4f} | "
             f"test_loss : {test_loss:.4f} | "
             f"test_acc : {test_acc:.4f} | "
+            f"test_prec : {test_prec:.4f} | "
+            f"test_rec : {test_rec:.4f} | "
+            f"test_f1 : {test_f1:.4f} | "
         )
         # update results dict
         results["train_loss"].append(train_loss)
         results["train_acc"].append(train_acc)
+        results["train_prec"].append(train_prec)
+        results["train_rec"].append(train_rec)
+        results["train_f1"].append(train_f1)
+
         results["test_loss"].append(test_loss)
         results["test_acc"].append(test_acc)
+        results["test_prec"].append(test_prec)
+        results["test_rec"].append(test_rec)
+        results["test_f1"].append(test_f1)
 
         # See if there's a writer, if so, log to it
         if writer:
@@ -206,6 +266,21 @@ def train(
             writer.add_scalars(
                 main_tag="Accuracy",
                 tag_scalar_dict={"train_acc": train_acc, "test_acc": test_acc},
+                global_step=epoch,
+            )
+            writer.add_scalars(
+                main_tag="Precision",
+                tag_scalar_dict={"train_prec": train_prec, "test_prec": test_prec},
+                global_step=epoch,
+            )
+            writer.add_scalars(
+                main_tag="Recall",
+                tag_scalar_dict={"train_rec": train_rec, "test_rec": test_rec},
+                global_step=epoch,
+            )
+            writer.add_scalars(
+                main_tag="f1-Score",
+                tag_scalar_dict={"train_f1": train_f1, "test_f1": test_f1},
                 global_step=epoch,
             )
 
@@ -299,6 +374,13 @@ def create_pretrained_effnet_model(
     for param in model.parameters():
         param.requires_grad = False
 
+    # Unfreeze only the last few blocks in EfficientNet
+    for name, param in model.named_parameters():
+        if (
+            "features.6" in name or "features.7" in name
+        ):  # Adjust for different EfficientNet versions
+            param.requires_grad = True  # Enable training for deeper layers
+
     # Set a random seed for reproducibility before modifying the classifier
     torch.manual_seed(seed)
     model.classifier = nn.Sequential(
@@ -328,6 +410,28 @@ def create_untrained_effnet_model(
     weights_class = getattr(
         torchvision.models, f"EfficientNet_{version.upper()}_Weights"
     )
+    weights = weights_class.DEFAULT
+    transforms = weights.transforms()
+
+    return model, transforms
+
+
+def create_untrained_ViT_model(
+    version: str = "B_16", num_classes: int = 2, seed: int = 42
+):
+    """Creates an Vision Transfomers feature extractor model and transforms.
+
+    Args:
+        num_classes (int, optional): number of classes in the classifier head. Defaults to 2.
+        seed (int, optional): random seed value. Defaults to 42.
+
+    Returns:
+        model (torch.nn.Module): ViT feature extractor model.
+        transforms (torchvision.transforms): EffNetB2 image transforms.
+    """
+    # 1, 2, 3. Create EffNetB2 pretrained weights, transforms and model
+    model = ViT.ViT(version=version, num_classes=num_classes)
+    weights_class = getattr(torchvision.models, f"ViT_{version}_Weights")
     weights = weights_class.DEFAULT
     transforms = weights.transforms()
 
