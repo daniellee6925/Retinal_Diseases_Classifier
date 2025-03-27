@@ -18,6 +18,7 @@ def train_step(
     loss_fn: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    binary: bool = False,
 ) -> Tuple[float, float]:
     """Trains a PyTorch Model for one Epoch
     1. Train Mode
@@ -34,6 +35,7 @@ def train_step(
     loss_fn: PyTorch loss function to minimize
     optimzer: PyTorch Optimizer
     device: target device to compute ("cpu", "cuda")
+    binary: True if binary classfication
 
     Returns:
     A tuple of training loss, training accuracy, training precision, training recall, training f1-score
@@ -52,6 +54,9 @@ def train_step(
         # send data to target device
         X, y = X.to(device), y.to(device)
 
+        # for binary classification
+        y = y.unsqueeze(1).float()
+
         # 1. Forward Pass
         y_pred = model(X)
 
@@ -69,21 +74,31 @@ def train_step(
         optimizer.step()
 
         # Calculate and accumulate accuracy metrics
-        y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
-        train_acc += (y_pred_class == y).sum().item() / len(y_pred)
+        if binary:
+            probs = torch.sigmoid(y_pred)  # Convert logits to probabilities
+            y_pred_class = (
+                probs >= 0.4
+            ).int()  # Convert probabilities to binary labels
 
+        else:
+            y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
+
+        train_acc += (y_pred_class == y).sum().item() / len(y_pred)
         # Convert tensors to NumPy for sklearn metrics
         y_true_np = y.cpu().numpy()
         y_pred_np = y_pred_class.cpu().numpy()
 
         # Calculate and accumulate precision, recall, and F1-score (macro-averaged for multi-class classification)
-        train_precision += precision_score(
-            y_true_np, y_pred_np, average="macro", zero_division=0
-        )
-        train_recall += recall_score(
-            y_true_np, y_pred_np, average="macro", zero_division=0
-        )
-        train_f1 += f1_score(y_true_np, y_pred_np, average="macro")
+        if binary:
+            train_precision += precision_score(
+                y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
+            )
+            train_recall += recall_score(
+                y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
+            )
+            train_f1 += f1_score(
+                y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
+            )
 
     # Adjust metrics to get average over per batch
     train_loss /= len(dataloader)
@@ -101,6 +116,7 @@ def test_step(
     dataloader: torch.utils.data.DataLoader,
     loss_fn: torch.nn.Module,
     device: torch.device,
+    binary: bool = False,
 ) -> Tuple[float, float]:
     """Test a PyTorch Model for one Epoch
     1. Eval Mode
@@ -114,6 +130,7 @@ def test_step(
     loss_fn: PyTorch loss function to minimize
     optimzer: PyTorch Optimizer
     device: target device to compute ("cpu", "cuda")
+    binary: True if binary classfication
 
     Returns:
     A tuple of test loss, test accuracy, test precision, traintesting recall, test f1-score
@@ -132,6 +149,9 @@ def test_step(
             # send data to target device
             X, y = X.to(device), y.to(device)
 
+            # for binary classification
+            y = y.unsqueeze(1).float()
+
             # 1. Forward pass
             test_pred_logits = model(X)
 
@@ -140,9 +160,17 @@ def test_step(
             test_loss += loss.item()
 
             # 3. caclulate accuracy
-            test_pred_labels = torch.argmax(
-                torch.softmax(test_pred_logits, dim=1), dim=1
-            )
+            if binary:
+                probs = torch.sigmoid(
+                    test_pred_logits
+                )  # Convert logits to probabilities
+                test_pred_labels = (
+                    probs >= 0.4
+                ).int()  # Convert probabilities to binary labels
+            else:
+                test_pred_labels = torch.argmax(
+                    torch.softmax(test_pred_logits, dim=1), dim=1
+                )
             test_acc += (test_pred_labels == y).sum().item() / len(test_pred_labels)
 
             # Convert tensors to NumPy for sklearn metrics
@@ -150,13 +178,16 @@ def test_step(
             y_pred_np = test_pred_labels.cpu().numpy()
 
             # Calculate and accumulate precision, recall, and F1-score (macro-averaged for multi-class classification)
-            test_precision += precision_score(
-                y_true_np, y_pred_np, average="macro", zero_division=0
-            )
-            test_recall += recall_score(
-                y_true_np, y_pred_np, average="macro", zero_division=0
-            )
-            test_f1 += f1_score(y_true_np, y_pred_np, average="macro")
+            if binary:
+                test_precision += precision_score(
+                    y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
+                )
+                test_recall += recall_score(
+                    y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
+                )
+                test_f1 += f1_score(
+                    y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
+                )
 
     # adjust metrics to get average per batch
     test_loss /= len(dataloader)
@@ -178,6 +209,7 @@ def train(
     epochs: int,
     device: torch.device,
     writer: torch.utils.tensorboard.writer.SummaryWriter = None,
+    binary: bool = False,
 ) -> Dict[str, list[float]]:
     """
     Train and Tests a PyTorch Model
@@ -193,6 +225,7 @@ def train(
     epochs: integer indicating how many epochs to train on
     device: target device to compute ("cpu", "cuda")
     writer: A SummaryWriter() instance to log model results to
+    binary: True if binary classfication
 
     Returns:
     Dictionary of training and testing loss, accuracy, precision, recall, f1-score
@@ -221,12 +254,14 @@ def train(
             loss_fn=loss_fn,
             optimizer=optimizer,
             device=device,
+            binary=binary,
         )
         test_loss, test_acc, test_prec, test_rec, test_f1 = test_step(
             model=model,
             dataloader=test_dataloader,
             loss_fn=loss_fn,
             device=device,
+            binary=binary,
         )
         # print stats
         print(
@@ -377,7 +412,8 @@ def create_pretrained_effnet_model(
     # Unfreeze only the last few blocks in EfficientNet
     for name, param in model.named_parameters():
         if (
-            "features.6" in name or "features.7" in name
+            # "features.6" in name or
+            "features.7" in name
         ):  # Adjust for different EfficientNet versions
             param.requires_grad = True  # Enable training for deeper layers
 
