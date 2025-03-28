@@ -54,8 +54,9 @@ def train_step(
         # send data to target device
         X, y = X.to(device), y.to(device)
 
-        # for binary classification
-        y = y.unsqueeze(1).float()
+        if binary:
+            # for binary classification
+            y = y.unsqueeze(1).float()
 
         # 1. Forward Pass
         y_pred = model(X)
@@ -84,12 +85,12 @@ def train_step(
             y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
 
         train_acc += (y_pred_class == y).sum().item() / len(y_pred)
-        # Convert tensors to NumPy for sklearn metrics
-        y_true_np = y.cpu().numpy()
-        y_pred_np = y_pred_class.cpu().numpy()
 
         # Calculate and accumulate precision, recall, and F1-score (macro-averaged for multi-class classification)
         if binary:
+            # Convert tensors to NumPy for sklearn metrics
+            y_true_np = y.cpu().numpy()
+            y_pred_np = y_pred_class.cpu().numpy()
             train_precision += precision_score(
                 y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
             )
@@ -149,8 +150,9 @@ def test_step(
             # send data to target device
             X, y = X.to(device), y.to(device)
 
-            # for binary classification
-            y = y.unsqueeze(1).float()
+            if binary:
+                # for binary classification
+                y = y.unsqueeze(1).float()
 
             # 1. Forward pass
             test_pred_logits = model(X)
@@ -173,12 +175,11 @@ def test_step(
                 )
             test_acc += (test_pred_labels == y).sum().item() / len(test_pred_labels)
 
-            # Convert tensors to NumPy for sklearn metrics
-            y_true_np = y.cpu().numpy()
-            y_pred_np = test_pred_labels.cpu().numpy()
-
             # Calculate and accumulate precision, recall, and F1-score (macro-averaged for multi-class classification)
             if binary:
+                # Convert tensors to NumPy for sklearn metrics
+                y_true_np = y.cpu().numpy()
+                y_pred_np = test_pred_labels.cpu().numpy()
                 test_precision += precision_score(
                     y_true_np, y_pred_np, pos_label=0, average="binary", zero_division=0
                 )
