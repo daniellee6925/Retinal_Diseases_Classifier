@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from torch import nn
+from collections import Counter
 
 from sklearn.metrics import roc_auc_score
 import torch.nn.functional as F
@@ -332,3 +333,18 @@ def set_seeds(seed: int = 42):
     torch.manual_seed(seed)
     # Set the seed for CUDA torch operations (ones that happen on the GPU)
     torch.cuda.manual_seed(seed)
+
+
+# Assuming you have a DataLoader `train_loader` and your dataset is labeled
+def count_classes(dataloader):
+    class_counts = Counter()
+
+    for _, labels in dataloader:
+        # If labels are one-hot encoded, get the class index by using argmax
+        if labels.ndimension() > 1:
+            labels = labels.argmax(dim=1)
+
+        # Update class counts
+        class_counts.update(labels.numpy())
+
+    return class_counts
