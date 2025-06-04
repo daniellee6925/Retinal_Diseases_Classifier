@@ -56,7 +56,7 @@ def train_step(
 
         if binary:
             # for binary classification
-            y = y.unsqueeze(1).float()
+            y = y.unsqueeze(1).to(torch.float32)
 
         # 1. Forward Pass
         y_pred = model(X)
@@ -152,7 +152,7 @@ def test_step(
 
             if binary:
                 # for binary classification
-                y = y.unsqueeze(1).float()
+                y = y.unsqueeze(1).to(torch.float32)
 
             # 1. Forward pass
             test_pred_logits = model(X)
@@ -167,7 +167,7 @@ def test_step(
                     test_pred_logits
                 )  # Convert logits to probabilities
                 test_pred_labels = (
-                    probs >= 0.4
+                    probs >= 0.6
                 ).int()  # Convert probabilities to binary labels
             else:
                 test_pred_labels = torch.argmax(

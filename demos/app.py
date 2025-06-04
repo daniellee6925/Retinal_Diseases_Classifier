@@ -3,23 +3,23 @@ import gradio as gr
 import os
 import torch
 
-from model import create_effnetb2_model
+from model import create_pretrained_effnet_model
 from timeit import default_timer as timer
 from typing import Tuple, Dict
 
 # setup class names
-class_names = ["pizza", "steak", "sushi"]
+class_names = ["NORMAL", "ARMD", "DR", "MH", "ODC"]
 
 ### model and transforms prep ###
 # create Effent2 model
-effnetb2, effnetb2_transforms = create_effnetb2_model(
-    num_classes=len(class_names), seed=42
+effnet, effnet_transforms = create_pretrained_effnet_model(
+    version="b3", num_classes=len(class_names), seed=42
 )
 
 # load saved model weights
-effnetb2.load_state_dict(
+effnet.load_state_dict(
     torch.load(
-        f="09_pretrained_effnetb2_feature_extractor_pizza_steak_sushi_20_percent.pth",
+        f="pretrained_effnetb3_type_classification.pth",
         map_location=torch.device("cpu"),
     )
 )
@@ -34,12 +34,12 @@ def predict(img) -> Tuple[Dict, float]:
     start_time = timer()
 
     # transform the target image and add batch dim
-    img = effnetb2_transforms(img).unsqueeze(0)
+    img = effnet_transforms(img).unsqueeze(0)
 
     # put model into eval mode and turn on inference mode
-    effnetb2.eval()
+    effnet.eval()
     with torch.inference_mode():
-        pred_probs = torch.softmax(effnetb2(img), dim=1)
+        pred_probs = torch.softmax(effnet(img), dim=1)
 
     # create prediction label and probability dictionary for each class (required for Gradio's output)
     pred_labels_and_probs = {
@@ -55,8 +55,8 @@ def predict(img) -> Tuple[Dict, float]:
 
 ### Gradio app ###
 # create title, description and article strings
-title = "FoodVision Mini"
-description = "An EfficientNetB2 feature extractor computer vision model to classify images of food as pizza, steak or sushi."
+title = "Reitnal Disease Classifier"
+description = "An EfficientNet feature extractor computer vision model to classify retinal diseases."
 article = "Created by PyTorch"
 
 # create examples list from "examples/" directory

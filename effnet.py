@@ -227,6 +227,3 @@ def test():
     model = EfficientNet(version=version, num_classes=num_classes).to(device)
 
     print(model(x).shape)  # (num_examples, num_classes)
-
-
-test()
